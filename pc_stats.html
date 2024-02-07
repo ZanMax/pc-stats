@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PC Stats for Multiple Servers</title>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: 'Ubuntu', sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        #app {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-family: 'Ubuntu', sans-serif;
+            color: #333;
+            text-align: center;
+        }
+
+        h2 {
+            color: #666;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="header">
+        <h1>PC Stats</h1>
+    </div>
+    <div>
+        <label for="refresh-interval">Refresh Interval:</label>
+        <select id="refresh-interval" v-model="refreshInterval">
+            <option value="2000">2 sec</option>
+            <option value="5000">5 sec</option>
+            <option value="10000">10 sec</option>
+            <option value="30000">30 sec</option>
+            <option value="60000">60 sec</option>
+        </select>
+    </div>
+    <div v-for="(stats, serverIP) in servers" :key="serverIP">
+        <h2>{{ stats.hostname ? `${stats.hostname} (${serverIP})` : serverIP }}</h2>
+        <table>
+            <tr>
+                <th>CPU Load</th>
+                <th>CPU Temperature</th>
+                <th>Memory Usage</th>
+                <th>Disk Usage</th>
+                <th>Uptime</th>
+            </tr>
+            <tr>
+                <td>{{ stats.cpuLoad }}%</td>
+                <td>{{ stats.cpuTemperature }}°C</td>
+                <td>{{ stats.memoryUsed }} / {{ stats.totalMemory }} ( {{ (stats.memoryUsed / stats.totalMemory * 100).toFixed(2) }}% )</td>
+                <td>{{ stats.diskUsage }} / {{ stats.diskTotal }} ( {{ (stats.diskUsage / stats.diskTotal * 100).toFixed(2) }}% )</td>
+                <td>{{ (stats.uptime / 3600).toFixed(2) }} hours</td>
+            </tr>
+        </table>
+        <p v-if="stats.error">{{ stats.error }}</p>
+    </div>
+</div>
+
+<script>
+    new Vue({
+        el: '#app',
+        data() {
+            return {
+                serverList: ['1.1.1.1'], // Update with your server IPs
+                servers: {},
+                refreshInterval: 5000, // Default refresh interval
+            };
+        },
+        methods: {
+            async fetchPCStats(serverIP) {
+                try {
+                    const response = await axios.get(`http://${serverIP}:9889/pcstats`);
+                    console.log(response);
+                    const data = response.data;
+                    this.$set(this.servers, serverIP, {
+                        cpuLoad: data.cpu_load.toFixed(2),
+                        cpuTemperature: data.cpu_temperature.toFixed(2), // If this value is not useful, consider handling it differently
+                        // Convert bytes to gigabytes for total and used memory, then calculate percentage
+                        totalMemory: (data.total_memory / (1024 ** 3)).toFixed(2),
+                        memoryUsed: (data.memory_used / (1024 ** 3)).toFixed(2),
+                        memoryUsagePercent: ((data.memory_used / data.total_memory) * 100).toFixed(2),
+                        // Convert bytes to gigabytes for total and used disk space, then calculate percentage
+                        diskTotal: (data.disk_total / (1024 ** 3)).toFixed(2),
+                        diskUsage: (data.disk_usage / (1024 ** 3)).toFixed(2),
+                        diskUsagePercent: ((data.disk_usage / data.disk_total) * 100).toFixed(2),
+                        hostname: data.hostname,
+                        uptime: data.uptime,
+                        error: '' // Ensure this is reset if data is successfully fetched
+                    });
+                } catch (error) {
+                    console.error('Error fetching data from', serverIP, error);
+                    this.$set(this.servers, serverIP, {error: 'Unable to fetch data'});
+                }
+            },
+
+            startFetchingData() {
+                this.serverList.forEach(serverIP => {
+                    this.fetchPCStats(serverIP);
+                });
+                setInterval(() => {
+                    this.serverList.forEach(serverIP => {
+                        this.fetchPCStats(serverIP);
+                    });
+                }, this.refreshInterval);
+            }
+        },
+        mounted() {
+            this.startFetchingData();
+        }
+    });
+</script>
+</body>
+</html>
